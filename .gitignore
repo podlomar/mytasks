@@ -1,0 +1,10 @@
+# Dependencies
+node_modules/
+
+# Your capture log: every selection and window title you have ever captured.
+server/captures.jsonl
+
+# Built from the .gschema.xml by install.sh
+extension/schemas/gschemas.compiled
+
+*.log

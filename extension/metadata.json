@@ -1,0 +1,9 @@
+{
+  "uuid": "quick-task@podlomar.local",
+  "name": "Quick Task Capture",
+  "description": "Press a hotkey to send the current selection, plus the focused window and app context, to a local task API.",
+  "shell-version": ["50"],
+  "settings-schema": "org.gnome.shell.extensions.quick-task",
+  "gettext-domain": "quick-task",
+  "version": 1
+}

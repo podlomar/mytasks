@@ -1,0 +1,39 @@
+/* Loaded by GNOME Shell on enable, so edits apply on a disable/enable cycle. */
+
+.quick-task-dialog {
+  width: 32em;
+}
+
+/* Each text box grows with its content up to max-height, then scrolls. */
+.quick-task-field {
+  margin-top: 12px;
+}
+
+.quick-task-text {
+  max-height: 8em;
+}
+
+.quick-task-note {
+  max-height: 12em;
+}
+
+.quick-task-note .quick-task-entry {
+  min-height: 4.5em;
+}
+
+/* Category chips: .button:checked comes from the shell theme, so the selected
+   chip picks up the accent colour in both light and dark styles. */
+.quick-task-categories {
+  spacing: 8px;
+  margin-top: 16px;
+}
+
+.quick-task-category {
+  padding: 6px 16px;
+  border-radius: 999px;
+}
+
+.quick-task-status {
+  margin-top: 12px;
+  color: #f66151;
+}

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.quick-task"
+          path="/org/gnome/shell/extensions/quick-task/">
+    <key name="capture-shortcut" type="as">
+      <default><![CDATA[['<Super>t']]]></default>
+      <summary>Capture shortcut</summary>
+      <description>Key combination that captures the current selection.</description>
+    </key>
+    <key name="categories" type="as">
+      <default><![CDATA[['todo', 'shop/albert', 'shop/ikea']]]></default>
+      <summary>Categories</summary>
+      <description>Choices offered in the capture dialog. The first one is preselected.</description>
+    </key>
+    <key name="endpoint" type="s">
+      <default>'http://127.0.0.1:4123/captures'</default>
+      <summary>Capture endpoint</summary>
+      <description>URL that receives the POSTed capture payload.</description>
+    </key>
+    <key name="timeout-seconds" type="i">
+      <default>3</default>
+      <range min="1" max="30"/>
+      <summary>Request timeout</summary>
+      <description>Seconds to wait before reporting the server unreachable.</description>
+    </key>
+    <key name="include-cwd" type="b">
+      <default>true</default>
+      <summary>Include working directory</summary>
+      <description>Resolve the source process's working directory from /proc.</description>
+    </key>
+  </schema>
+</schemalist>
