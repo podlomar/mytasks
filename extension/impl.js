@@ -284,6 +284,7 @@ export default class QuickTask {
             style_class: 'quick-task-entry',
             hint_text: hint,
             can_focus: true,
+            reactive: true,
             x_expand: true,
         });
         ShellEntry.addContextMenu(entry);
@@ -294,6 +295,31 @@ export default class QuickTask {
         text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
         text.activatable = false;
         text.set_text(initial);
+
+        // The inner Clutter.Text only covers the lines it holds, so most of an
+        // empty note box is frame, and St.Entry does not pass clicks there on to
+        // the text. Do it here, putting the cursor at the end like a text area.
+        // Bubble phase: Clutter.Text stops clicks that land on the text itself,
+        // so those keep their usual cursor placement and never reach this.
+        const click = new Clutter.ClickGesture();
+        click.set_required_button(Clutter.BUTTON_PRIMARY);
+        click.connect('recognize', () => {
+            text.grab_key_focus();
+            text.set_cursor_position(-1);
+            text.set_selection_bound(-1);
+        });
+        entry.add_action(click);
+
+        // St.Entry centres its text and placeholder vertically, so with a
+        // min-height on the box (the note) both would float in the middle.
+        // Hand that minimum to the text and the placeholder instead: each then
+        // fills the box and starts at the top. The height stays defined in CSS.
+        entry.connect('style-changed', () => {
+            const min = Math.max(entry.get_theme_node().get_min_height(), 0);
+            text.min_height = min;
+            if (entry.hint_actor)
+                entry.hint_actor.min_height = min;
+        });
 
         const box = new St.BoxLayout({
             orientation: Clutter.Orientation.VERTICAL,
