@@ -8,7 +8,7 @@ export interface NewEntry {
   note: string;
   /** Where the entry came from: "desktop" for the GNOME extension. */
   source: string;
-  /** Category key from tasking.json: "todo", or "buy:ele" with a subcategory. */
+  /** Category key from tasking.json: "todo" or "buy" on its own, or "buy:ele" with a subcategory. */
   category: string | null;
   /** Desktop file id of the source app, e.g. "code.desktop". */
   appId: string | null;
@@ -24,4 +24,13 @@ export interface NewEntry {
 export interface Entry extends NewEntry {
   /** Assigned by SQLite on insert. */
   id: number;
+}
+
+/** One subcategory's entries, as returned by GET /categories/:category?group=subcategory. */
+export interface EntryGroup {
+  /** Subcategory key, or null for entries stored under the category alone. */
+  subcategory: string | null;
+  /** Name from tasking.json, e.g. "grocery". Null for the category-alone group and for a subcategory no longer in tasking.json. */
+  name: string | null;
+  entries: Entry[];
 }

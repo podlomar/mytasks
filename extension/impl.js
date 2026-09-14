@@ -157,7 +157,8 @@ export default class QuickTask {
         content.add_child(noteField.view);
 
         // Top-level categories, plus a second row of subcategories for those that
-        // have them (buy). The stored value is "todo", or "buy:ele" with one.
+        // have them (buy). The stored value is the category alone ("todo",
+        // "buy"), or "buy:ele" when a subcategory is chosen.
         let taxonomy = [];
         try {
             taxonomy = this._loadTaxonomy();
@@ -172,7 +173,7 @@ export default class QuickTask {
         const updateCategory = () => {
             if (!current)
                 category = null;
-            else if (current.subcategories.length > 0)
+            else if (chosenSub.get(current.key))
                 category = `${current.key}:${chosenSub.get(current.key)}`;
             else
                 category = current.key;
@@ -195,9 +196,10 @@ export default class QuickTask {
                 subKey => {
                     chosenSub.set(c.key, subKey);
                     updateCategory();
-                });
-            // The taxonomy's rule: something clearly to buy but ambiguous is buy:gen.
-            row.select((c.subcategories.find(sub => sub.key === 'gen') ?? c.subcategories[0]).key);
+                },
+                {allowNone: true});
+            // Nothing preselected: with no subcategory the entry is stored as the
+            // category alone, which is every category's default.
             row.actor.visible = false;
             subRows.set(c.key, row);
         }
@@ -308,7 +310,7 @@ export default class QuickTask {
      * which nothing in GNOME Shell itself uses, left the chips with no visible
      * size. Plain St.BoxLayout rows are what the shell's own dialogs use.
      */
-    _chipGroup(options, styleClass, onSelect) {
+    _chipGroup(options, styleClass, onSelect, {allowNone = false} = {}) {
         const actor = new St.BoxLayout({
             style_class: `quick-task-chips ${styleClass}`,
             orientation: Clutter.Orientation.VERTICAL,
@@ -316,10 +318,13 @@ export default class QuickTask {
         });
 
         const chips = new Map();
+        let selected = null;
         const select = key => {
+            // With allowNone, choosing the selected chip again clears the choice.
+            selected = allowNone && key === selected ? null : key;
             for (const [k, chip] of chips)
-                chip.checked = k === key;
-            onSelect(key);
+                chip.checked = k === selected;
+            onSelect(selected);
         };
 
         let row = null;

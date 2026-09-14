@@ -6,7 +6,9 @@
   "description": "Local capture endpoint for the GNOME quick-task extension",
   "scripts": {
     "start": "node index.ts",
-    "dev": "node --watch index.ts"
+    "dev": "node --watch index.ts",
+    "seed": "node seed.ts",
+    "seed:clear": "node seed.ts --clear"
   },
   "dependencies": {
     "express": "^5.2.1"

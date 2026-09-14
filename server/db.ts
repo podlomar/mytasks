@@ -32,6 +32,15 @@ export function openDb(path: string) {
     VALUES (:date, :text, :note, :source, :category, :appId, :appName, :appExe, :windowTitle)
   `);
   const latest = db.prepare("SELECT * FROM entries ORDER BY date DESC, id DESC LIMIT ?");
+  const deleteBySource = db.prepare("DELETE FROM entries WHERE source = ?");
+
+  // Exact matches only, so "buy" matches "buy" and "buy:gro" but never "buyer".
+  const inCategory = db.prepare(`
+    SELECT * FROM entries
+    WHERE category = :category
+       OR substr(category, 1, length(:category) + 1) = :category || ':'
+    ORDER BY date DESC, id DESC
+  `);
 
   return {
     add(entry: NewEntry): Entry {
@@ -42,6 +51,16 @@ export function openDb(path: string) {
     /** Most recent first. */
     latest(limit: number): Entry[] {
       return latest.all(limit) as unknown as Entry[];
+    },
+
+    /** Every entry in a category and its subcategories, most recent first. */
+    inCategory(category: string): Entry[] {
+      return inCategory.all({ category }) as unknown as Entry[];
+    },
+
+    /** Delete every entry from one source; returns how many went. */
+    removeBySource(source: string): number {
+      return Number(deleteBySource.run(source).changes);
     },
 
     close() {

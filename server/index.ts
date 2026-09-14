@@ -2,10 +2,12 @@ import express from "express";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openDb } from "./db.ts";
-import type { NewEntry } from "./types.ts";
+import { loadTaxonomy, type Category } from "./taxonomy.ts";
+import type { Entry, EntryGroup, NewEntry } from "./types.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DB_PATH = process.env.DB_PATH ?? join(HERE, "tasking.db");
+const TAXONOMY_PATH = process.env.TAXONOMY_PATH ?? join(HERE, "..", "tasking.json");
 const PORT = Number(process.env.PORT ?? 4123);
 
 const db = openDb(DB_PATH);
@@ -40,6 +42,32 @@ function preview(text: string, max = 72): string {
   return flat.length > max ? flat.slice(0, max - 1) + "…" : flat;
 }
 
+/**
+ * Groups in tasking.json order, led by the entries stored under the category
+ * alone. Every group is present even when empty, so a client can lay out all
+ * sections. A subcategory found in stored entries but no longer in
+ * tasking.json gets a group at the end, so grouping never drops an entry.
+ */
+function groupBySubcategory(category: Category, only: string | null, entries: Entry[]): EntryGroup[] {
+  const groups: EntryGroup[] = only
+    ? category.subcategories.filter((s) => s.key === only).map((s) => ({ subcategory: s.key, name: s.name, entries: [] }))
+    : [
+        { subcategory: null, name: null, entries: [] },
+        ...category.subcategories.map((s) => ({ subcategory: s.key, name: s.name, entries: [] as Entry[] })),
+      ];
+
+  for (const entry of entries) {
+    const sub = entry.category?.split(":")[1] ?? null;
+    let group = groups.find((g) => g.subcategory === sub);
+    if (!group) {
+      group = { subcategory: sub, name: null, entries: [] };
+      groups.push(group);
+    }
+    group.entries.push(entry);
+  }
+  return groups;
+}
+
 app.post("/captures", (req, res) => {
   const entry = normalize(req.body);
   if (!entry) {
@@ -63,11 +91,41 @@ app.get("/captures", (req, res) => {
   res.json(db.latest(limit));
 });
 
+/** One category, e.g. /categories/buy, or one subcategory, /categories/buy:gro. */
+app.get("/categories/:category", (req, res) => {
+  const group = req.query.group;
+  if (group !== undefined && group !== "subcategory") {
+    return res.status(400).json({ error: 'group must be "subcategory"' });
+  }
+
+  let taxonomy: Category[];
+  try {
+    taxonomy = loadTaxonomy(TAXONOMY_PATH);
+  } catch (err: any) {
+    return res.status(500).json({ error: `could not read ${TAXONOMY_PATH}: ${err.message}` });
+  }
+
+  const parts = req.params.category.split(":");
+  const category = parts.length <= 2 ? taxonomy.find((c) => c.key === parts[0]) : undefined;
+  if (!category) {
+    return res.status(404).json({ error: `unknown category "${req.params.category}"` });
+  }
+  const sub = parts[1] ?? null;
+  if (sub !== null && !category.subcategories.some((s) => s.key === sub)) {
+    return res.status(404).json({ error: `unknown subcategory "${sub}" in "${category.key}"` });
+  }
+
+  const entries = db.inCategory(req.params.category);
+  res.json(group === "subcategory" ? groupBySubcategory(category, sub, entries) : entries);
+});
+
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
 app.listen(PORT, "127.0.0.1", () => {
   console.log(`\n  tasking server listening on http://127.0.0.1:${PORT}`);
-  console.log(`  POST /captures   store an entry`);
-  console.log(`  GET  /captures   list recent entries`);
-  console.log(`  storing to ${DB_PATH} (table: entries)\n`);
+  console.log(`  POST /captures                store an entry`);
+  console.log(`  GET  /captures                list recent entries`);
+  console.log(`  GET  /categories/:category    entries in one category (?group=subcategory)`);
+  console.log(`  storing to ${DB_PATH} (table: entries)`);
+  console.log(`  categories from ${TAXONOMY_PATH}\n`);
 });

@@ -78,10 +78,6 @@
             "painting supplies",
             "board game"
           ]
-        },
-        "gen": {
-          "name": "general",
-          "description": "Something to buy that does not clearly belong to another buy subcategory."
         }
       }
     },
@@ -145,10 +141,11 @@
   },
   "classification_rules": [
     "Choose exactly one top-level category.",
-    "For buy items, choose exactly one buy subcategory.",
+    "A category without a subcategory is that category's default: it covers anything in the category that fits none of its subcategories.",
+    "For buy items, add a buy subcategory only when one clearly applies.",
     "Use the most specific applicable buy subcategory.",
     "Do not create new categories or subcategories.",
-    "If an item is ambiguous but is clearly something to buy, use buy:gen.",
+    "If an item is clearly something to buy but fits no buy subcategory, use buy with no subcategory.",
     "If the agent cannot confidently determine the appropriate category, use note.",
     "Prefer note over making an uncertain classification.",
     "The category describes the primary nature or intent of the item, not merely an incidental property."

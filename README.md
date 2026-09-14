@@ -48,8 +48,9 @@ so the tool lives inside GNOME Shell.
 - Categories come from `tasking.json` at the repo root. The top-level ones
   are a row of chips, with `todo` preselected. Picking one that has
   subcategories (`buy`) shows a second row — grocery, home, electronics, … —
-  starting at `general`. The stored category is then `buy:gro`, `buy:ele`, and
-  so on.
+  with nothing selected. Leave it that way and the entry is stored as plain
+  `buy`: every category's default is no subcategory. Pick one and it is
+  `buy:gro`, `buy:ele`, and so on; click the selected one again to clear it.
 - Chips sit in centred rows, split by label length.
 
 ## Feedback
@@ -81,6 +82,53 @@ newest first. Set `DB_PATH` to keep the database somewhere else.
 
 The database runs in WAL mode, so you can browse it with any SQLite tool while
 the server is running.
+
+### API
+
+| Method | Path | Returns |
+|---|---|---|
+| `POST` | `/captures` | Stores an entry; returns it with its `id` |
+| `GET` | `/captures?limit=20` | The latest entries, newest first |
+| `GET` | `/categories/:category` | Every entry in one category, newest first |
+| `GET` | `/categories/:category?group=subcategory` | The same, grouped by subcategory |
+| `GET` | `/health` | `{"ok": true}` |
+
+`/categories/buy` covers plain `buy` entries and every `buy:…` subcategory;
+`/categories/buy:gro` narrows to one subcategory. An unknown category or
+subcategory is a 404. The server checks against `tasking.json`, reading it on
+every request so edits apply without a restart (`TAXONOMY_PATH` points it
+elsewhere).
+
+Grouped, the response has one group per subcategory in `tasking.json` order,
+led by the entries stored under the category alone. Empty groups are kept, so
+a client can lay out every section:
+
+```json
+[
+  { "subcategory": null,  "name": null,      "entries": [ … ] },
+  { "subcategory": "gro", "name": "grocery", "entries": [ … ] },
+  { "subcategory": "hom", "name": "home",    "entries": [] }
+]
+```
+
+A subcategory that still appears in stored entries but is no longer in
+`tasking.json` gets its own group at the end, with `name: null`, so grouping
+never drops an entry.
+
+### Mock data
+
+```bash
+npm run seed          # replace the mock entries
+npm run seed:clear    # remove them
+```
+
+`server/seed.ts` writes about 40 entries across every category and
+subcategory, dated over the last few weeks, including the awkward cases:
+Czech diacritics, an emoji in a window title, a multi-line selection,
+note-only entries, and entries captured with no window focused. They are
+marked `source: "mock"`, so re-running replaces the set rather than adding a
+second one, and your real entries are never touched. The seed checks its
+categories against `tasking.json` before writing anything.
 
 ## Installing the extension
 
@@ -185,8 +233,9 @@ that SQLite assigns. `server/types.ts` is the reference.
   be empty, but not both.
 - `source` names the tool that captured it. This extension always sends
   `"desktop"`, leaving room for, say, a browser extension later.
-- `category` is a key from `tasking.json`: a top-level category such as
-  `todo`, or `category:subcategory` such as `buy:ele`.
+- `category` is a key from `tasking.json`: a category on its own, such as
+  `todo` or `buy`, or `category:subcategory` such as `buy:ele`. A category
+  without a subcategory is that category's default.
 - `appExe` comes from `/proc/<pid>/exe`, and is `null` when the process
   denies the read.
 - `windowTitle` is the highest-value field for later summarization: it is
