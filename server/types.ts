@@ -34,3 +34,12 @@ export interface EntryGroup {
   name: string | null;
   entries: Entry[];
 }
+
+/** A category as listed by GET /api/categories: its tasking.json definition plus entry counts. */
+export interface CategorySummary {
+  key: string;
+  description: string;
+  /** Entries in the category, including all its subcategories. */
+  count: number;
+  subcategories: { key: string; name: string; description: string; count: number }[];
+}

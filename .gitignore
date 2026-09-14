@@ -9,6 +9,9 @@ server/*.db-shm
 # The JSON Lines log from before the database. No longer read.
 server/captures.jsonl
 
+# Built web app: npm run build in web/
+web/dist/
+
 # Built from the .gschema.xml by install.sh
 extension/schemas/gschemas.compiled
 

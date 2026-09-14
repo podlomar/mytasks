@@ -33,6 +33,7 @@ export function openDb(path: string) {
   `);
   const latest = db.prepare("SELECT * FROM entries ORDER BY date DESC, id DESC LIMIT ?");
   const deleteBySource = db.prepare("DELETE FROM entries WHERE source = ?");
+  const countByCategory = db.prepare("SELECT category, count(*) AS n FROM entries GROUP BY category");
 
   // Exact matches only, so "buy" matches "buy" and "buy:gro" but never "buyer".
   const inCategory = db.prepare(`
@@ -56,6 +57,12 @@ export function openDb(path: string) {
     /** Every entry in a category and its subcategories, most recent first. */
     inCategory(category: string): Entry[] {
       return inCategory.all({ category }) as unknown as Entry[];
+    },
+
+    /** How many entries each stored category string has, e.g. "buy:gro" -> 5. */
+    countsByCategory(): Map<string, number> {
+      const rows = countByCategory.all() as unknown as { category: string | null; n: number }[];
+      return new Map(rows.filter((r) => r.category !== null).map((r) => [r.category!, Number(r.n)]));
     },
 
     /** Delete every entry from one source; returns how many went. */

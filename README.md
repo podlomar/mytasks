@@ -9,7 +9,9 @@ Two pieces:
 - `extension/` — a GNOME Shell extension (GJS). Owns the hotkey, reads the
   selection, gathers context, sends the request, and reports the outcome.
   `extension.js` is a thin loader; `impl.js` holds everything real.
-- `server/` — a small Express server that stores captures in SQLite. Test target; swap
+- `server/` — a small Express server that stores captures in SQLite, serves
+  the API under `/api`, and serves the web app.
+- `web/` — a mobile-first, dark React app for browsing entries by category. Test target; swap
   the endpoint for your real app when ready.
 
 ## Why a shell extension
@@ -77,7 +79,7 @@ npm run dev        # same, restarts on edit
 
 Node runs the TypeScript directly — no build step. Captures are stored in the
 `entries` table of `server/tasking.db`, using Node's built-in SQLite, so there
-is no native module to build either. `GET /captures?limit=20` reads them back
+is no native module to build either. `GET /api/captures?limit=20` reads them back
 newest first. Set `DB_PATH` to keep the database somewhere else.
 
 The database runs in WAL mode, so you can browse it with any SQLite tool while
@@ -87,14 +89,15 @@ the server is running.
 
 | Method | Path | Returns |
 |---|---|---|
-| `POST` | `/captures` | Stores an entry; returns it with its `id` |
-| `GET` | `/captures?limit=20` | The latest entries, newest first |
-| `GET` | `/categories/:category` | Every entry in one category, newest first |
-| `GET` | `/categories/:category?group=subcategory` | The same, grouped by subcategory |
-| `GET` | `/health` | `{"ok": true}` |
+| `POST` | `/api/captures` | Stores an entry; returns it with its `id` |
+| `GET` | `/api/captures?limit=20` | The latest entries, newest first |
+| `GET` | `/api/categories` | Every category in `tasking.json`, with entry counts |
+| `GET` | `/api/categories/:category` | Every entry in one category, newest first |
+| `GET` | `/api/categories/:category?group=subcategory` | The same, grouped by subcategory |
+| `GET` | `/api/health` | `{"ok": true}` |
 
-`/categories/buy` covers plain `buy` entries and every `buy:…` subcategory;
-`/categories/buy:gro` narrows to one subcategory. An unknown category or
+`/api/categories/buy` covers plain `buy` entries and every `buy:…` subcategory;
+`/api/categories/buy:gro` narrows to one subcategory. An unknown category or
 subcategory is a 404. The server checks against `tasking.json`, reading it on
 every request so edits apply without a restart (`TAXONOMY_PATH` points it
 elsewhere).
@@ -129,6 +132,32 @@ note-only entries, and entries captured with no window focused. They are
 marked `source: "mock"`, so re-running replaces the set rather than adding a
 second one, and your real entries are never touched. The seed checks its
 categories against `tasking.json` before writing anything.
+
+## Web app
+
+A mobile-first, dark React app in `web/` (Vite + React + TypeScript) shows
+every category on its own page, grouped by subcategory. The Express server
+serves it next to the API.
+
+```bash
+cd web
+npm install
+npm run build      # then open http://127.0.0.1:4123
+npm run dev        # or: Vite on http://localhost:5173, with /api proxied to the server
+```
+
+- `/` lists every category with its counts. `/buy`, `/todo`, … are the
+  category pages: entries stored under the category alone first, then one
+  section per subcategory, with jump chips at the top.
+- Pages refetch when you come back to the tab, so new captures show up
+  without a reload.
+- The app imports its types from `server/types.ts`, so the API and the client
+  cannot silently drift apart.
+- Routing is a few lines in `web/src/router.tsx` rather than a library: there
+  are two routes.
+- The server listens on 127.0.0.1 only. To open the app on your phone, start
+  it with `HOST=0.0.0.0`, but everything you have captured is then readable by
+  anyone on your network.
 
 ## Installing the extension
 
@@ -190,7 +219,7 @@ system-wide, so `gsettings` needs `--schemadir` to find it:
 
 ```bash
 S=~/.local/share/gnome-shell/extensions/quick-task@podlomar.local/schemas
-gsettings --schemadir $S set org.gnome.shell.extensions.quick-task endpoint 'http://127.0.0.1:4123/captures'
+gsettings --schemadir $S set org.gnome.shell.extensions.quick-task endpoint 'http://127.0.0.1:4123/api/captures'
 gsettings --schemadir $S set org.gnome.shell.extensions.quick-task capture-shortcut "['<Super>t']"
 gsettings --schemadir $S set org.gnome.shell.extensions.quick-task timeout-seconds 3
 ```

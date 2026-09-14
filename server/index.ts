@@ -1,14 +1,18 @@
 import express from "express";
-import { join, dirname } from "node:path";
+import { existsSync } from "node:fs";
+import { join, dirname, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openDb } from "./db.ts";
 import { loadTaxonomy, type Category } from "./taxonomy.ts";
-import type { Entry, EntryGroup, NewEntry } from "./types.ts";
+import type { CategorySummary, Entry, EntryGroup, NewEntry } from "./types.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DB_PATH = process.env.DB_PATH ?? join(HERE, "tasking.db");
 const TAXONOMY_PATH = process.env.TAXONOMY_PATH ?? join(HERE, "..", "tasking.json");
+const WEB_DIST = process.env.WEB_DIST ?? join(HERE, "..", "web", "dist");
 const PORT = Number(process.env.PORT ?? 4123);
+// Local only by default: everything captured is personal.
+const HOST = process.env.HOST ?? "127.0.0.1";
 
 const db = openDb(DB_PATH);
 const app = express();
@@ -42,6 +46,16 @@ function preview(text: string, max = 72): string {
   return flat.length > max ? flat.slice(0, max - 1) + "…" : flat;
 }
 
+/** tasking.json, read fresh; on failure answers 500 and returns null. */
+function readTaxonomy(res: express.Response): Category[] | null {
+  try {
+    return loadTaxonomy(TAXONOMY_PATH);
+  } catch (err: any) {
+    res.status(500).json({ error: `could not read ${TAXONOMY_PATH}: ${err.message}` });
+    return null;
+  }
+}
+
 /**
  * Groups in tasking.json order, led by the entries stored under the category
  * alone. Every group is present even when empty, so a client can lay out all
@@ -68,7 +82,11 @@ function groupBySubcategory(category: Category, only: string | null, entries: En
   return groups;
 }
 
-app.post("/captures", (req, res) => {
+// --- API ---------------------------------------------------------------------
+
+const api = express.Router();
+
+api.post("/captures", (req, res) => {
   const entry = normalize(req.body);
   if (!entry) {
     console.warn("  rejected: body must be an object with a string `text`");
@@ -86,24 +104,42 @@ app.post("/captures", (req, res) => {
   res.status(201).json(stored);
 });
 
-app.get("/captures", (req, res) => {
+api.get("/captures", (req, res) => {
   const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 1000);
   res.json(db.latest(limit));
 });
 
-/** One category, e.g. /categories/buy, or one subcategory, /categories/buy:gro. */
-app.get("/categories/:category", (req, res) => {
+/** Every category in tasking.json, with how many entries each holds. */
+api.get("/categories", (_req, res) => {
+  const taxonomy = readTaxonomy(res);
+  if (!taxonomy) return;
+
+  const counts = db.countsByCategory();
+  const summaries: CategorySummary[] = taxonomy.map((c) => {
+    // Plain entries, every subcategory, and any subcategory no longer in tasking.json.
+    let count = 0;
+    for (const [category, n] of counts) {
+      if (category === c.key || category.startsWith(`${c.key}:`)) count += n;
+    }
+    return {
+      key: c.key,
+      description: c.description,
+      count,
+      subcategories: c.subcategories.map((s) => ({ ...s, count: counts.get(`${c.key}:${s.key}`) ?? 0 })),
+    };
+  });
+  res.json(summaries);
+});
+
+/** One category, e.g. /api/categories/buy, or one subcategory, /api/categories/buy:gro. */
+api.get("/categories/:category", (req, res) => {
   const group = req.query.group;
   if (group !== undefined && group !== "subcategory") {
     return res.status(400).json({ error: 'group must be "subcategory"' });
   }
 
-  let taxonomy: Category[];
-  try {
-    taxonomy = loadTaxonomy(TAXONOMY_PATH);
-  } catch (err: any) {
-    return res.status(500).json({ error: `could not read ${TAXONOMY_PATH}: ${err.message}` });
-  }
+  const taxonomy = readTaxonomy(res);
+  if (!taxonomy) return;
 
   const parts = req.params.category.split(":");
   const category = parts.length <= 2 ? taxonomy.find((c) => c.key === parts[0]) : undefined;
@@ -119,13 +155,35 @@ app.get("/categories/:category", (req, res) => {
   res.json(group === "subcategory" ? groupBySubcategory(category, sub, entries) : entries);
 });
 
-app.get("/health", (_req, res) => res.json({ ok: true }));
+api.get("/health", (_req, res) => res.json({ ok: true }));
 
-app.listen(PORT, "127.0.0.1", () => {
-  console.log(`\n  tasking server listening on http://127.0.0.1:${PORT}`);
-  console.log(`  POST /captures                store an entry`);
-  console.log(`  GET  /captures                list recent entries`);
-  console.log(`  GET  /categories/:category    entries in one category (?group=subcategory)`);
+// Unknown API paths are JSON errors, never the web app's HTML.
+api.use((_req, res) => res.status(404).json({ error: "no such API endpoint" }));
+
+app.use("/api", api);
+
+// --- Web app -----------------------------------------------------------------
+
+// Built files from web/dist, then index.html for any other page address, so
+// client-side routes like /buy survive a reload. Paths with a file extension
+// are not pages: a missing asset stays a 404.
+app.use(express.static(WEB_DIST));
+app.use((req, res, next) => {
+  if (req.method !== "GET" || extname(req.path)) return next();
+  const index = join(WEB_DIST, "index.html");
+  if (!existsSync(index)) {
+    return res.status(503).type("text").send('The web app is not built yet: run "npm run build" in web/.');
+  }
+  res.sendFile(index);
+});
+
+app.listen(PORT, HOST, () => {
+  console.log(`\n  tasking server listening on http://${HOST}:${PORT}`);
+  console.log(`  POST /api/captures                store an entry`);
+  console.log(`  GET  /api/captures                list recent entries`);
+  console.log(`  GET  /api/categories              categories with counts`);
+  console.log(`  GET  /api/categories/:category    entries in one category (?group=subcategory)`);
+  console.log(`  web app from ${WEB_DIST}`);
   console.log(`  storing to ${DB_PATH} (table: entries)`);
   console.log(`  categories from ${TAXONOMY_PATH}\n`);
 });
