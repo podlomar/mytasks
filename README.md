@@ -9,7 +9,7 @@ Two pieces:
 - `extension/` — a GNOME Shell extension (GJS). Owns the hotkey, reads the
   selection, gathers context, sends the request, and reports the outcome.
   `extension.js` is a thin loader; `impl.js` holds everything real.
-- `server/` — a small Express server that receives captures. Test target; swap
+- `server/` — a small Express server that stores captures in SQLite. Test target; swap
   the endpoint for your real app when ready.
 
 ## Why a shell extension
@@ -17,7 +17,7 @@ Two pieces:
 Wayland only lets the compositor grab global hotkeys, and only code running
 inside the compositor can see which window is focused. A standalone script could
 read the selection but could never tell you it came from Firefox, from the page
-"RFC 9110", while you were in `~/projects/api`. That context is the point here,
+"RFC 9110". That context is the point here,
 so the tool lives inside GNOME Shell.
 
 ## The capture dialog
@@ -32,7 +32,8 @@ so the tool lives inside GNOME Shell.
 │ ┌──────────────────────────────────────────┐ │
 │ │ Add a note…                              │ │
 │ └──────────────────────────────────────────┘ │
-│     ( todo )  ( shop/albert )  ( shop/ikea ) │
+│      (todo) (buy) (link) (note) (media)      │
+│           (place) (event) (person)           │
 │                          [Cancel]   [Add]    │
 └──────────────────────────────────────────────┘
 ```
@@ -44,6 +45,12 @@ so the tool lives inside GNOME Shell.
 - `Ctrl+Enter` adds, `Esc` cancels. Plain Enter is a new line in both boxes.
 - Add is disabled until at least one box has text.
 - Both boxes grow with their content and then scroll.
+- Categories come from `tasking.json` at the repo root. The top-level ones
+  are a row of chips, with `todo` preselected. Picking one that has
+  subcategories (`buy`) shows a second row — grocery, home, electronics, … —
+  starting at `general`. The stored category is then `buy:gro`, `buy:ele`, and
+  so on.
+- Chips sit in centred rows, split by label length.
 
 ## Feedback
 
@@ -67,8 +74,13 @@ npm start          # http://127.0.0.1:4123
 npm run dev        # same, restarts on edit
 ```
 
-Node runs the TypeScript directly — no build step. Captures append to
-`server/captures.jsonl`; `GET /captures?limit=20` reads them back newest first.
+Node runs the TypeScript directly — no build step. Captures are stored in the
+`entries` table of `server/tasking.db`, using Node's built-in SQLite, so there
+is no native module to build either. `GET /captures?limit=20` reads them back
+newest first. Set `DB_PATH` to keep the database somewhere else.
+
+The database runs in WAL mode, so you can browse it with any SQLite tool while
+the server is running.
 
 ## Installing the extension
 
@@ -132,10 +144,11 @@ system-wide, so `gsettings` needs `--schemadir` to find it:
 S=~/.local/share/gnome-shell/extensions/quick-task@podlomar.local/schemas
 gsettings --schemadir $S set org.gnome.shell.extensions.quick-task endpoint 'http://127.0.0.1:4123/captures'
 gsettings --schemadir $S set org.gnome.shell.extensions.quick-task capture-shortcut "['<Super>t']"
-gsettings --schemadir $S set org.gnome.shell.extensions.quick-task categories "['todo', 'shop/albert', 'shop/ikea']"
 gsettings --schemadir $S set org.gnome.shell.extensions.quick-task timeout-seconds 3
-gsettings --schemadir $S set org.gnome.shell.extensions.quick-task include-cwd true
 ```
+
+Categories are not a setting. They come from `tasking.json`, which
+`install.sh` copies into the extension: edit it, then run `./install.sh`.
 
 A shell keybinding is a **global grab**: the compositor intercepts it before the
 focused application ever sees it. That makes `Super` the right modifier here —
@@ -148,45 +161,36 @@ terminals, and reopen-closed-editor in VS Code.
 
 ## Payload
 
-See `server/types.ts` for the authoritative shape.
+Each capture is POSTed as one flat object and stored as one row of the
+`entries` table. The columns have the same names as the fields, plus an `id`
+that SQLite assigns. `server/types.ts` is the reference.
 
-```jsonc
+```json
 {
-  "capturedAt": "2026-09-09T19:55:12.301Z",
-  "text": "the retry budget should be per-endpoint, not global",
-  "note": "check how the gateway does it",
+  "date": "2026-09-09T19:55:19.410Z",
+  "text": "Local capture endpoint",
+  "note": "",
+  "source": "desktop",
   "category": "todo",
-  "source": "primary",              // primary | clipboard | none
-  "app": {
-    "id": "firefox_firefox.desktop",
-    "name": "Firefox",
-    "wmClass": "firefox",
-    "gtkApplicationId": null,
-    "sandboxedAppId": "firefox",    // snap/flatpak id
-    "pid": 6001,
-    "exe": "/snap/firefox/current/usr/lib/firefox/firefox",
-    "cwd": null                     // from /proc; denied for sandboxed apps
-  },
-  "window": {
-    "title": "Designing resilient HTTP clients",
-    "id": 842019,
-    "workspace": 0,
-    "monitor": 0
-  }
+  "appId": "code.desktop",
+  "appName": "Visual Studio Code",
+  "appExe": "/usr/share/code/code",
+  "windowTitle": "package.json - tasking - Visual Studio Code"
 }
 ```
 
-`window.title` is the highest-value field for later summarization — it is the
-page title, file name, or document name. `app.cwd` resolves through `/proc`, so
-captures from a terminal or editor carry the project directory; it is `null` for
-snap and flatpak apps, which deny the read.
-
-### Selection source
-
-`primary` is the X11-style highlight buffer: selecting text fills it with no
-keypress, which is why capture needs no synthetic `Ctrl+C`. Apps that do not
-export it fall back to `clipboard`, i.e. whatever you last copied — check
-`source` before trusting a capture to be *current*.
+- `date` is when you pressed the hotkey, not when the server received it.
+- `text` is the first box as you left it: the highlighted text, or the
+  clipboard if nothing was highlighted. `note` is the second box. Either may
+  be empty, but not both.
+- `source` names the tool that captured it. This extension always sends
+  `"desktop"`, leaving room for, say, a browser extension later.
+- `category` is a key from `tasking.json`: a top-level category such as
+  `todo`, or `category:subcategory` such as `buy:ele`.
+- `appExe` comes from `/proc/<pid>/exe`, and is `null` when the process
+  denies the read.
+- `windowTitle` is the highest-value field for later summarization: it is
+  usually the page title, file name, or document name.
 
 ## Known gap: browser URLs
 

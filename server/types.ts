@@ -1,43 +1,27 @@
-/** Payload sent by the GNOME shell extension on each hotkey capture. */
-export interface CapturePayload {
+/** An entry as the GNOME extension POSTs it: a stored row minus its id. */
+export interface NewEntry {
   /** ISO-8601 time the hotkey was pressed, from the shell's clock. */
-  capturedAt: string;
+  date: string;
   /** The selected text, as edited in the dialog. May be empty. */
   text: string;
   /** Free-form note typed in the dialog. May be empty. */
   note: string;
-  /** Category chosen in the dialog, e.g. "todo" or "shop/ikea". */
+  /** Where the entry came from: "desktop" for the GNOME extension. */
+  source: string;
+  /** Category key from tasking.json: "todo", or "buy:ele" with a subcategory. */
   category: string | null;
-  /** Which selection buffer the text came from. */
-  source: "primary" | "clipboard" | "none";
-  /** The application that owned the focused window. */
-  app: {
-    /** Desktop file id, e.g. "firefox_firefox.desktop". */
-    id: string | null;
-    /** Human readable name, e.g. "Firefox". */
-    name: string | null;
-    wmClass: string | null;
-    gtkApplicationId: string | null;
-    /** Snap/Flatpak id when the app is sandboxed. */
-    sandboxedAppId: string | null;
-    pid: number | null;
-    /** Resolved from /proc/<pid>/exe. */
-    exe: string | null;
-    /** Resolved from /proc/<pid>/cwd - the project dir, for terminals and editors. */
-    cwd: string | null;
-  };
-  /** The focused window at the moment of capture. */
-  window: {
-    /** Usually the page title, file name, or document name. */
-    title: string | null;
-    id: number | null;
-    workspace: number | null;
-    monitor: number | null;
-  };
+  /** Desktop file id of the source app, e.g. "code.desktop". */
+  appId: string | null;
+  /** Human-readable app name, e.g. "Visual Studio Code". */
+  appName: string | null;
+  /** Executable of the source process, from /proc/<pid>/exe. Null when the read is denied. */
+  appExe: string | null;
+  /** Title of the focused window: usually the page, file or document name. */
+  windowTitle: string | null;
 }
 
-/** A stored capture: the payload plus what the server assigned. */
-export interface StoredCapture extends CapturePayload {
-  id: string;
-  receivedAt: string;
+/** A row of the `entries` table. Column names match the JSON fields. */
+export interface Entry extends NewEntry {
+  /** Assigned by SQLite on insert. */
+  id: number;
 }

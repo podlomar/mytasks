@@ -30,19 +30,6 @@ export default class QuickTaskPreferences extends ExtensionPreferences {
         settings.bind('timeout-seconds', timeout, 'value', Gio.SettingsBindFlags.DEFAULT);
         server.add(timeout);
 
-        const context = new Adw.PreferencesGroup({
-            title: _('Context'),
-            description: _('Extra detail attached to every capture.'),
-        });
-        page.add(context);
-
-        const cwd = new Adw.SwitchRow({
-            title: _('Include working directory'),
-            subtitle: _('Read the source app’s cwd from /proc, so captures from a terminal or editor carry their project path'),
-        });
-        settings.bind('include-cwd', cwd, 'active', Gio.SettingsBindFlags.DEFAULT);
-        context.add(cwd);
-
         const shortcut = new Adw.PreferencesGroup({
             title: _('Shortcut'),
             description: _('Change it with gsettings; see Configuration in the README.'),

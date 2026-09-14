@@ -15,6 +15,8 @@ import * as ShellEntry from 'resource:///org/gnome/shell/ui/shellEntry.js';
 
 const CAPTURE_KEY = 'capture-shortcut';
 const ENTER_KEYS = [Clutter.KEY_Return, Clutter.KEY_KP_Enter, Clutter.KEY_ISO_Enter];
+// Roughly how many characters of chip labels fit on one row of the dialog.
+const CHIP_ROW_CHARS = 46;
 
 /**
  * The implementation. Re-imported fresh on every enable() by extension.js, so
@@ -69,12 +71,12 @@ export default class QuickTask {
             return;
 
         const context = this._collectContext();
-        const capturedAt = new Date().toISOString();
+        const date = new Date().toISOString();
 
-        this._readSelection((text, source) => {
+        this._readSelection(text => {
             // The extension may have been disabled while the clipboard answered.
             if (this._settings && !this._dialog)
-                this._openDialog({capturedAt, text, source, context});
+                this._openDialog({date, text, context});
         });
     }
 
@@ -83,48 +85,30 @@ export default class QuickTask {
         const clipboard = St.Clipboard.get_default();
         clipboard.get_text(St.ClipboardType.PRIMARY, (_cb, primary) => {
             if (primary?.trim()) {
-                callback(primary, 'primary');
+                callback(primary);
                 return;
             }
-            clipboard.get_text(St.ClipboardType.CLIPBOARD, (_cb2, clip) => {
-                const text = clip ?? '';
-                callback(text, text.trim() ? 'clipboard' : 'none');
-            });
+            clipboard.get_text(St.ClipboardType.CLIPBOARD, (_cb2, clip) => callback(clip ?? ''));
         });
     }
 
-    /** Everything we can learn about where this capture came from. */
+    /** Where this capture came from: the focused window and its app. */
     _collectContext() {
         const win = global.display.focus_window;
         const tracker = Shell.WindowTracker.get_default();
         const app = win ? tracker.get_window_app(win) : tracker.focus_app;
-        const pid = win?.get_pid() ?? null;
 
         return {
-            app: {
-                id: app?.get_id() ?? null,
-                name: app?.get_name() ?? null,
-                wmClass: win?.get_wm_class() ?? null,
-                gtkApplicationId: win?.get_gtk_application_id() ?? null,
-                sandboxedAppId: win?.get_sandboxed_app_id() ?? null,
-                pid,
-                exe: this._readProcLink(pid, 'exe'),
-                cwd: this._settings.get_boolean('include-cwd')
-                    ? this._readProcLink(pid, 'cwd')
-                    : null,
-            },
-            window: {
-                title: win?.get_title() ?? null,
-                id: win?.get_id() ?? null,
-                workspace: win?.get_workspace()?.index() ?? null,
-                monitor: win?.get_monitor() ?? null,
-            },
+            appId: app?.get_id() ?? null,
+            appName: app?.get_name() ?? null,
+            appExe: this._readProcLink(win?.get_pid() ?? null, 'exe'),
+            windowTitle: win?.get_title() ?? null,
         };
     }
 
-    /** Resolve /proc/<pid>/{exe,cwd}; denied for sandboxed apps, so never throw. */
+    /** Resolve /proc/<pid>/<name>. The read can be denied, so never throw. */
     _readProcLink(pid, name) {
-        if (pid === null)
+        if (!(pid > 0))
             return null;
         try {
             return GLib.file_read_link(`/proc/${pid}/${name}`);
@@ -159,12 +143,12 @@ export default class QuickTask {
      * category picker, and Cancel / Add. Esc cancels; Ctrl+Enter adds, because
      * plain Enter is a newline in both fields.
      */
-    _buildDialog(dialog, {capturedAt, text, source, context}) {
+    _buildDialog(dialog, {date, text, context}) {
         const content = dialog.contentLayout;
 
         content.add_child(new Dialog.MessageDialogContent({
-            title: context.app.name ?? context.app.wmClass ?? 'Unknown app',
-            description: context.window.title ?? '',
+            title: context.appName ?? 'Unknown app',
+            description: context.windowTitle ?? '',
         }));
 
         const textField = this._textArea(text, 'Selected text', 'quick-task-text');
@@ -172,30 +156,57 @@ export default class QuickTask {
         content.add_child(textField.view);
         content.add_child(noteField.view);
 
-        const categories = this._settings.get_strv('categories');
-        let category = categories[0] ?? null;
-        if (categories.length > 0) {
-            const picker = new St.BoxLayout({
-                style_class: 'quick-task-categories',
-                x_align: Clutter.ActorAlign.CENTER,
+        // Top-level categories, plus a second row of subcategories for those that
+        // have them (buy). The stored value is "todo", or "buy:ele" with one.
+        let taxonomy = [];
+        try {
+            taxonomy = this._loadTaxonomy();
+        } catch (e) {
+            this._fail('Quick Task: could not read tasking.json', String(e.message ?? e));
+        }
+
+        let category = null;
+        let current = null;
+        const chosenSub = new Map();
+        const subRows = new Map();
+        const updateCategory = () => {
+            if (!current)
+                category = null;
+            else if (current.subcategories.length > 0)
+                category = `${current.key}:${chosenSub.get(current.key)}`;
+            else
+                category = current.key;
+        };
+
+        const topRow = this._chipGroup(
+            taxonomy.map(c => ({key: c.key, label: c.key})),
+            'quick-task-categories',
+            key => {
+                current = taxonomy.find(c => c.key === key);
+                for (const [k, row] of subRows)
+                    row.actor.visible = k === key;
+                updateCategory();
             });
-            const chips = categories.map(name => {
-                const chip = new St.Button({
-                    style_class: 'button quick-task-category',
-                    label: name,
-                    toggle_mode: true,
-                    can_focus: true,
-                    checked: name === category,
+
+        for (const c of taxonomy.filter(t => t.subcategories.length > 0)) {
+            const row = this._chipGroup(
+                c.subcategories.map(sub => ({key: sub.key, label: sub.name})),
+                'quick-task-subcategories',
+                subKey => {
+                    chosenSub.set(c.key, subKey);
+                    updateCategory();
                 });
-                // Behave as a radio group: clicking the checked chip keeps it checked.
-                chip.connect('clicked', () => {
-                    category = name;
-                    chips.forEach(c => (c.checked = c === chip));
-                });
-                picker.add_child(chip);
-                return chip;
-            });
-            content.add_child(picker);
+            // The taxonomy's rule: something clearly to buy but ambiguous is buy:gen.
+            row.select((c.subcategories.find(sub => sub.key === 'gen') ?? c.subcategories[0]).key);
+            row.actor.visible = false;
+            subRows.set(c.key, row);
+        }
+
+        if (taxonomy.length > 0) {
+            content.add_child(topRow.actor);
+            for (const row of subRows.values())
+                content.add_child(row.actor);
+            topRow.select(taxonomy[0].key);
         }
 
         const status = new St.Label({
@@ -238,12 +249,13 @@ export default class QuickTask {
             add.button.label = 'Adding…';
             status.hide();
 
+            // The stored shape, field for field: server/types.ts is the reference.
             const payload = {
-                capturedAt,
+                date,
                 text: textField.text.text,
                 note: noteField.text.text,
+                source: 'desktop',
                 category,
-                source,
                 ...context,
             };
 
@@ -272,6 +284,71 @@ export default class QuickTask {
         };
 
         dialog.setInitialKeyFocus(noteField.text);
+    }
+
+    /**
+     * Categories from tasking.json, which install.sh copies next to this file:
+     * top-level categories in file order, each with its subcategories, if any.
+     * Read on every dialog open, so the dialog never shows a stale list.
+     */
+    _loadTaxonomy() {
+        const path = this._extension.dir.get_child('tasking.json').get_path();
+        const [, bytes] = GLib.file_get_contents(path);
+        const {taxonomy} = JSON.parse(new TextDecoder().decode(bytes));
+        return Object.entries(taxonomy).map(([key, def]) => ({
+            key,
+            subcategories: Object.entries(def.subcategories ?? {})
+                .map(([subKey, sub]) => ({key: subKey, name: sub.name ?? subKey})),
+        }));
+    }
+
+    /**
+     * Chips that behave as a radio group, in centred rows. Rows are split by
+     * label length rather than by a wrapping layout manager: Clutter.FlowLayout,
+     * which nothing in GNOME Shell itself uses, left the chips with no visible
+     * size. Plain St.BoxLayout rows are what the shell's own dialogs use.
+     */
+    _chipGroup(options, styleClass, onSelect) {
+        const actor = new St.BoxLayout({
+            style_class: `quick-task-chips ${styleClass}`,
+            orientation: Clutter.Orientation.VERTICAL,
+            x_align: Clutter.ActorAlign.CENTER,
+        });
+
+        const chips = new Map();
+        const select = key => {
+            for (const [k, chip] of chips)
+                chip.checked = k === key;
+            onSelect(key);
+        };
+
+        let row = null;
+        let used = 0;
+        for (const {key, label} of options) {
+            // A chip costs its label plus about four characters of padding and spacing.
+            const cost = label.length + 4;
+            if (!row || used + cost > CHIP_ROW_CHARS) {
+                row = new St.BoxLayout({
+                    style_class: 'quick-task-chip-row',
+                    x_align: Clutter.ActorAlign.CENTER,
+                });
+                actor.add_child(row);
+                used = 0;
+            }
+            used += cost;
+
+            const chip = new St.Button({
+                style_class: 'button quick-task-chip',
+                label,
+                toggle_mode: true,
+                can_focus: true,
+            });
+            chip.connect('clicked', () => select(key));
+            row.add_child(chip);
+            chips.set(key, chip);
+        }
+
+        return {actor, select};
     }
 
     /**

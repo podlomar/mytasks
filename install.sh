@@ -3,12 +3,15 @@
 set -euo pipefail
 
 UUID="quick-task@podlomar.local"
-SRC="$(cd "$(dirname "$0")" && pwd)/extension"
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+SRC="$ROOT/extension"
 DEST="$HOME/.local/share/gnome-shell/extensions/$UUID"
 
 glib-compile-schemas "$SRC/schemas/"
 mkdir -p "$DEST"
 cp -r "$SRC/." "$DEST/"
+# The dialog reads its categories from here.
+cp "$ROOT/tasking.json" "$DEST/"
 echo "installed -> $DEST"
 
 known=$(gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell \

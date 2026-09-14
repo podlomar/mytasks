@@ -23,14 +23,29 @@
 
 /* Category chips: .button:checked comes from the shell theme, so the selected
    chip picks up the accent colour in both light and dark styles. */
-.quick-task-categories {
+/* Rows of chips, and the chips within a row, are 8px apart. */
+.quick-task-chips,
+.quick-task-chip-row {
   spacing: 8px;
+}
+
+.quick-task-categories {
   margin-top: 16px;
 }
 
-.quick-task-category {
-  padding: 6px 16px;
+/* Shown under the categories only when the chosen one has subcategories. */
+.quick-task-subcategories {
+  margin-top: 8px;
+}
+
+.quick-task-chip {
+  padding: 6px 14px;
   border-radius: 999px;
+}
+
+.quick-task-subcategories .quick-task-chip {
+  padding: 4px 12px;
+  font-size: 0.9em;
 }
 
 .quick-task-status {

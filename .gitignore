@@ -1,7 +1,12 @@
 # Dependencies
 node_modules/
 
-# Your capture log: every selection and window title you have ever captured.
+# Your entries database: every selection, note and window title you have captured.
+server/*.db
+server/*.db-wal
+server/*.db-shm
+
+# The JSON Lines log from before the database. No longer read.
 server/captures.jsonl
 
 # Built from the .gschema.xml by install.sh

@@ -1,0 +1,161 @@
+{
+  "taxonomy": {
+    "todo": {
+      "description": "Something the user wants or needs to do.",
+      "examples": [
+        "Call the dentist",
+        "Fix the leaking tap",
+        "Send the report"
+      ]
+    },
+    "buy": {
+      "description": "Something the user wants to purchase.",
+      "subcategories": {
+        "gro": {
+          "name": "grocery",
+          "description": "Food, beverages, and everyday household consumables typically bought at a supermarket or grocery store.",
+          "examples": [
+            "milk",
+            "eggs",
+            "vegetables",
+            "coffee",
+            "toilet paper",
+            "dishwasher tablets"
+          ]
+        },
+        "hom": {
+          "name": "home",
+          "description": "Furniture, home equipment, kitchen items, decorations, tools, and things primarily intended for the home.",
+          "examples": [
+            "IKEA shelf",
+            "desk lamp",
+            "frying pan",
+            "bed sheets",
+            "storage box"
+          ]
+        },
+        "ele": {
+          "name": "electronics",
+          "description": "Computers, phones, peripherals, electronic devices, cables, chargers, and other technology.",
+          "examples": [
+            "laptop",
+            "USB-C charger",
+            "keyboard",
+            "monitor",
+            "headphones",
+            "SSD"
+          ]
+        },
+        "clo": {
+          "name": "clothing",
+          "description": "Clothing, shoes, bags, jewelry, and other wearable accessories.",
+          "examples": [
+            "running shoes",
+            "T-shirt",
+            "winter jacket",
+            "backpack",
+            "sunglasses"
+          ]
+        },
+        "pha": {
+          "name": "pharmacy",
+          "description": "Pharmacy, personal care, hygiene, cosmetics, and similar health-related consumer products.",
+          "examples": [
+            "toothpaste",
+            "shampoo",
+            "deodorant",
+            "vitamins",
+            "bandages"
+          ]
+        },
+        "hob": {
+          "name": "hobby",
+          "description": "Items primarily related to hobbies, sports, games, crafts, music, or other recreational activities.",
+          "examples": [
+            "chess set",
+            "yoga mat",
+            "guitar strings",
+            "painting supplies",
+            "board game"
+          ]
+        },
+        "gen": {
+          "name": "general",
+          "description": "Something to buy that does not clearly belong to another buy subcategory."
+        }
+      }
+    },
+    "link": {
+      "description": "A URL or online resource the user wants to save or revisit.",
+      "examples": [
+        "https://example.com",
+        "An interesting GitHub repository",
+        "A useful article"
+      ]
+    },
+    "note": {
+      "description": "General information, thought, idea, fact, reminder, or other content that does not fit another category.",
+      "examples": [
+        "An idea for a project",
+        "A piece of information",
+        "Something to remember"
+      ]
+    },
+    "media": {
+      "description": "A piece of media the user wants to consume, such as a movie, series, book, music, podcast, or game.",
+      "examples": [
+        "The Godfather",
+        "A book to read",
+        "A TV series to watch",
+        "A podcast",
+        "An album",
+        "A video game"
+      ]
+    },
+    "place": {
+      "description": "A physical place the user wants to remember, visit, or consider visiting.",
+      "examples": [
+        "Restaurant",
+        "Cafe",
+        "Bar",
+        "Museum",
+        "Shop",
+        "Park"
+      ]
+    },
+    "event": {
+      "description": "A specific event or occurrence the user may want to attend or remember.",
+      "examples": [
+        "Concert",
+        "Theatre performance",
+        "Festival",
+        "Exhibition",
+        "Conference"
+      ]
+    },
+    "person": {
+      "description": "A person the user wants to remember, contact, or associate information with.",
+      "examples": [
+        "A person to contact",
+        "Someone recommended by a friend",
+        "An author",
+        "A professional contact"
+      ]
+    }
+  },
+  "classification_rules": [
+    "Choose exactly one top-level category.",
+    "For buy items, choose exactly one buy subcategory.",
+    "Use the most specific applicable buy subcategory.",
+    "Do not create new categories or subcategories.",
+    "If an item is ambiguous but is clearly something to buy, use buy:gen.",
+    "If the agent cannot confidently determine the appropriate category, use note.",
+    "Prefer note over making an uncertain classification.",
+    "The category describes the primary nature or intent of the item, not merely an incidental property."
+  ],
+  "output_format": {
+    "category": "string",
+    "subcategory": "string or null",
+    "text": "original item text"
+  }
+}
